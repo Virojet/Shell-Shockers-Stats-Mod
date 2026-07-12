@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Shell Shockers Stats Mod
-// @version      1.0.1
+// @version      1.0.2
 // @description  Standalone match stats tracker from Better HUD: live K/D/KDR, pinned respawn card, match history, and stats image export.
 // @namespace    https://github.com/Virojet/Shell-Shockers-Stats-Mod
 // @author       Virojet
@@ -280,7 +280,13 @@
                 const parsed = new URL(url, location.href);
                 const gameMatch = /\/game\/([^/?#]+)/.exec(parsed.pathname || "");
                 if (gameMatch) {
-                    if (gameMatch[1] !== window.__ssbGameCode) state._readyForReset = true;
+                    // Only arm a reset from a game-code change when NOT actively in a
+                    // match (pointer unlocked). Shell Shockers can open background or
+                    // next-match sockets to a different /game/<code> mid-match; without
+                    // this guard that flips the code and resets your live timer/stats
+                    // for no reason. A real new match unlocks (end screen) first, so
+                    // legitimate resets are still armed then.
+                    if (gameMatch[1] !== window.__ssbGameCode && !document.pointerLockElement) state._readyForReset = true;
                     window.__ssbGameCode = gameMatch[1];
                     window.__ssbGameHost = parsed.hostname;
                 }
@@ -677,7 +683,11 @@
             // Debounce: mid-match, kills/deaths only rise, so a lone-tick drop of 2+
             // players is a data glitch, not a match end. Require the signal to persist
             // across 2 consecutive ticks before arming a reset (prevents mid-match wipes).
-            const dropHot = !state._seedQ && dropVotes >= 2 &&
+            // Require a MAJORITY of scoreboard players to drop (not just 2), so a
+            // couple of glitching or rejoining players in a larger lobby can't trigger
+            // a reset. A genuine new match/round zeroes everyone, easily clearing this.
+            const dropThreshold = Math.max(2, Math.ceil(totalVotes / 2));
+            const dropHot = !state._seedQ && dropVotes >= dropThreshold &&
                 !(state._rollTs && Date.now() - state._rollTs < 8000);
             state._dropStreak = dropHot ? (state._dropStreak || 0) + 1 : 0;
             const rollSignal = state._dropStreak >= 2;
@@ -754,8 +764,12 @@
                 usedRecords.add(record);
 
                 if (rolledOver) {
-                    record.kills = rawKills;
-                    record.deaths = rawDeaths;
+                    // Clean 0/0 baseline for the new match. The trailing block below
+                    // rebaselines _lastK/_lastD to the current raw values, so future
+                    // kills/deaths accumulate from now — a transitional frame (kills
+                    // already zeroed, deaths not yet) can never leave stale deaths.
+                    record.kills = 0;
+                    record.deaths = 0;
                     record._lastTK = totalKills;
                     record._hiK = rawKills;
                     record._hiD = rawDeaths;
