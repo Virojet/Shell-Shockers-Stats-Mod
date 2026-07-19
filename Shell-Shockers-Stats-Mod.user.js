@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Shell Shockers Stats Mod
-// @version      1.0.2
+// @version      1.0.3
 // @description  Standalone match stats tracker from Better HUD: live K/D/KDR, pinned respawn card, match history, and stats image export.
 // @namespace    https://github.com/Virojet/Shell-Shockers-Stats-Mod
 // @author       Virojet
@@ -690,7 +690,11 @@
             const dropHot = !state._seedQ && dropVotes >= dropThreshold &&
                 !(state._rollTs && Date.now() - state._rollTs < 8000);
             state._dropStreak = dropHot ? (state._dropStreak || 0) + 1 : 0;
-            const rollSignal = state._dropStreak >= 2;
+            // One profile per lobby: never reset on the in-lobby scoreboard-drop
+            // heuristic — stats accumulate across rounds until the game CODE changes
+            // (a new lobby), which is handled separately by resetMatchState. This keeps
+            // one continuous Match History entry per lobby instead of one per round.
+            const rollSignal = false;
             if (state._pendReset && !locked) state._pendUnlock = 1;
             if (rollSignal && !state._pendReset) {
                 debugLog("MATCH-END drops=" + dropVotes + "/" + totalVotes);

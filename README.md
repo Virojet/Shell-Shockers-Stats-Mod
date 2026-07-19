@@ -4,7 +4,7 @@
 
 [![INSTALL](https://img.shields.io/badge/INSTALL-one--click-brightgreen?style=for-the-badge)](https://raw.githubusercontent.com/Virojet/Shell-Shockers-Stats-Mod/main/Shell-Shockers-Stats-Mod.user.js)
 &nbsp;
-[![Version](https://img.shields.io/badge/version-1.0.2-black?style=for-the-badge)](./Shell-Shockers-Stats-Mod.user.js)
+[![Version](https://img.shields.io/badge/version-1.0.3-black?style=for-the-badge)](./Shell-Shockers-Stats-Mod.user.js)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey?style=for-the-badge)](./LICENSE)
 
 This is the stats tracker from **[Better HUD](https://github.com/Virojet/Shell-Shockers-Better-Hud-Mod)**, pulled out into its own small userscript for people who only want stats — no crosshair editor, no performance panel, nothing else.
