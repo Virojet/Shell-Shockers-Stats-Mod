@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Shell Shockers Stats Mod
-// @version      2.0.0
+// @version      2.0.1
 // @description  Match History for Shell Shockers: every match's kills, deaths and KDR, a live scoreboard, and pictures to share. Open it from the round button on the home screen or with a key you set in Settings.
 // @namespace    https://github.com/Virojet/Shell-Shockers-Stats-Mod
 // @author       Virojet
@@ -93,7 +93,7 @@
   "use strict";
   if (window.ssStatsMod) return;   // already running: Tampermonkey and the Mod Menu both started it
 
-  const VERSION = "2.0.0";
+  const VERSION = "2.0.1";
   const TAG = "[Stats Mod]";
   const betterHud = () => !!(window.SSB_VERSION || window.__ssbSettings || window.__ssbOpenHistory);
   if (betterHud()) {
@@ -182,7 +182,8 @@
     const originals = new WeakMap();
     const nativeAppend = HTMLElement.prototype.appendChild;
     HTMLElement.prototype.appendChild = function (node) {
-      if (node && node.tagName === "SCRIPT" && !node.src && !originals.has(node)) {
+      // Better HUD loaded after this script makes the same additions itself, and this script stands down.
+      if (node && node.tagName === "SCRIPT" && !node.src && !originals.has(node) && !betterHud()) {
         try { patch(node); } catch (e) { warn("Patching the game failed", e); }
       }
       return nativeAppend.call(this, node);
@@ -282,6 +283,18 @@
     return "";
   }
 
+  // In a game (playing or paused), from the game's own flag. The player list stays filled after you leave a game,
+  // so it can't tell.
+  function inGame() {
+    try {
+      const x = window.extern;
+      if (x && typeof x.inGame === "boolean") return x.inGame;
+      const g = vue().game;
+      if (g && typeof g.on === "boolean") return g.on;
+    } catch (e) { /* not known: the player list decides */ }
+    return true;
+  }
+
   // The game's own mode (0 FFA, 1 Teams, 2 Spatula, 3 King) while a game is on; otherwise its HUD tells.
   function modeNow() {
     try {
@@ -345,11 +358,13 @@
         sd += r.deaths || 0;
         sn++;
       }
-      const sig = st.gameCode + "|" + st.matchStartMs + "|" + st.map + "|" + st.server + "|" + st.mode + "|" + st.kotcScore[1] + "," + st.kotcScore[2] + "|" + sk + "|" + sd + "|" + sn;
+      // A match goes in the history once it has players and has lasted 20 s. That's part of the fingerprint too,
+      // or a match where nothing changed after its first 20 s would never be saved.
+      const now = Date.now(), ready = (st.snapshot || []).length > 0 && now - st.matchStartMs >= 2e4;
+      const sig = st.gameCode + "|" + st.matchStartMs + "|" + st.map + "|" + st.server + "|" + st.mode + "|" + st.kotcScore[1] + "," + st.kotcScore[2] + "|" + sk + "|" + sd + "|" + sn + "|" + ready;
       if (!force && st._saveSig === sig && !st._histDue && !st._sessDue) return;
       st._saveSig = sig;
       const code = st.gameCode || st._synth || (st._synth = "local-" + (st.matchStartMs || Date.now()));
-      const now = Date.now();
       // In play the session is written at most every 10 s.
       if (force || !document.pointerLockElement || now - (st._sessTs || 0) >= 1e4) {
         st._sessTs = now;
@@ -359,8 +374,8 @@
           kotcScore: st.kotcScore, everSeenTeams: st.everSeenTeams, mode: st.mode, ts: now,
         }));
       } else st._sessDue = 1;
-      const players = (st.snapshot || []).map(p => ({ name: p.name, team: p.team, kills: p.kills, deaths: p.deaths, isMe: p.isMe }));
-      if (!players.length || now - st.matchStartMs < 2e4) return;
+      if (!ready) return;
+      const players = st.snapshot.map(p => ({ name: p.name, team: p.team, kills: p.kills, deaths: p.deaths, isMe: p.isMe }));
       // In play the history entry is refreshed at most every 15 s; the next tick does a skipped one.
       if (!force && document.pointerLockElement && now - (st._histTs || 0) < 15e3) {
         st._histDue = 1;
@@ -369,7 +384,8 @@
       st._histDue = 0;
       st._histTs = now;
       const list = hist();
-      const entry = { code, map: st.map, server: st.server, mode: st.mode, startMs: st.matchStartMs, endMs: now, kotc: st.kotcScore, players };
+      // A match that has ended keeps its end: a save after you left (closing the tab, say) doesn't make it longer.
+      const entry = { code, map: st.map, server: st.server, mode: st.mode, startMs: st.matchStartMs, endMs: st.matchEndMs || now, kotc: st.kotcScore, players };
       const i = list.findIndex(h => h && h.code === code && Math.abs((h.startMs || 0) - st.matchStartMs) < 15e3);
       if (i >= 0) {
         entry.label = list[i].label;
@@ -425,12 +441,24 @@
     const blue = read(1), red = read(2);
     if (blue + red > 0) st.kotcScore = { 1: blue, 2: red };
 
-    const players = window.players, locked = !!document.pointerLockElement, has = !!(players && players.some(p => p));
+    const players = window.players, locked = !!document.pointerLockElement, playing = inGame();
+    const has = playing && !!(players && players.some(p => p));
     if (has) {
       st._lastEmptyN = st._emptyN || 0;
       st._emptyN = 0;
     } else st._emptyN = (st._emptyN || 0) + 1;
-    if (st._prevHadPlayers && !has) st._readyForReset = true;
+    if (st._prevHadPlayers && !has) {
+      st._readyForReset = true;
+      // Left the game: the match ends now, and its history entry is brought up to date at once.
+      if (!playing && st.matchStartMs) {
+        st.matchEndMs = Date.now();
+        st.inMatch = false;
+        st.hadLock = false;
+        st._prevHadPlayers = false;
+        save(true);
+        return;
+      }
+    }
     if (has) {
       if (!(locked && st.matchStartMs && st.inMatch && !st._readyForReset)) {
         const map = mapName(), server = serverRegion(), code = net.code;
@@ -479,7 +507,7 @@
       if (!st.map) st.map = mapName();
       if (!st.server) st.server = serverRegion();
     }
-    if (!players) return;
+    if (!players || !playing) return;
     if (!st.map) st.map = mapName();
     if (!st.server) st.server = serverRegion();
     if (!st.byName) st.byName = {};
@@ -818,7 +846,7 @@
   // In a game right now (playing or paused): the game has players and the match hasn't been left.
   function isLive() {
     const p = window.players;
-    return !!st.matchStartMs && !st._readyForReset && !!(p && p.some && p.some(x => x));
+    return !!st.matchStartMs && !st._readyForReset && inGame() && !!(p && p.some && p.some(x => x));
   }
 
   // One team's card: its name, player count (and the King of the Coop score), then # / Player / K / D / KDR.
@@ -982,6 +1010,22 @@
     if (wasOpen && rf && rf !== document.body && rf.isConnected && rf.focus && !document.pointerLockElement) rf.focus({ preventScroll: true });
   }
   const isOpen = () => !!document.getElementById("ssb-stats-overlay")?.classList.contains("open");
+  // Esc closes the window even when the keyboard isn't in it (it was opened while playing, say). With the keyboard
+  // in it, the window's own handler does this.
+  function onEscape(e) {
+    if (e.key !== "Escape" || dialogOpen || document.pointerLockElement || !isOpen()) return;
+    const ov = document.getElementById("ssb-stats-overlay");
+    if (ov.contains(e.target)) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    eatKeyUp("Escape");
+    const dd = ov.querySelector(".ssb-dd.ssb-open");
+    if (dd) ddClose(dd, true, true);
+    else {
+      sound("ui_toggletab");
+      closeOverlay();
+    }
+  }
 
   // The live match: from the key in a game, or from its row in Match History.
   function openLive(focus) {
@@ -1965,6 +2009,10 @@
     } else {
       watchBtn();
       injectBtn();
+      // Opened while playing, the window didn't take the keyboard. Now that the game has let go, it does, so Esc
+      // closes it.
+      const p = isOpen() && document.getElementById("ssb-stats-panel");
+      if (p && !p.contains(document.activeElement)) p.focus({ preventScroll: true });
     }
   }
   function onResize() {
@@ -2002,6 +2050,7 @@
     saveTimer = setInterval(save, 3000);
     menuTimer = setInterval(tick, 1000);
     document.addEventListener("keydown", onHotkey, true);
+    window.addEventListener("keydown", onEscape, true);
     document.addEventListener("click", onSettingsClick, true);
     window.addEventListener("beforeunload", onUnload);
     window.addEventListener("pagehide", onUnload);
@@ -2027,6 +2076,7 @@
     clearTimeout(resizeTimer);
     cancelAnimationFrame(scaleFrame);
     document.removeEventListener("keydown", onHotkey, true);
+    window.removeEventListener("keydown", onEscape, true);
     document.removeEventListener("click", onSettingsClick, true);
     window.removeEventListener("beforeunload", onUnload);
     window.removeEventListener("pagehide", onUnload);
@@ -2087,7 +2137,8 @@
     settings: () => ({ ...saved }),
     status: () => ({
       running, off: dead ? "Better HUD" : wanted ? "" : "Mod Menu", patches: patchReport,
-      players: Array.isArray(window.players), live: isLive(), match: { code: st.gameCode, map: st.map, server: st.server, mode: st.mode, startMs: st.matchStartMs },
+      players: Array.isArray(window.players), inGame: inGame(), live: isLive(),
+      match: { code: st.gameCode, map: st.map, server: st.server, mode: st.mode, startMs: st.matchStartMs, endMs: st.matchEndMs },
       settingsOpen: !!pending,
     }),
   };
