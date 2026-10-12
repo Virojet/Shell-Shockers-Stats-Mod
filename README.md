@@ -7,7 +7,7 @@
 **Match History for Shell Shockers: your kills, deaths and KDR from every match, a live scoreboard, and pictures to share.**
 
 [![Install](https://img.shields.io/badge/Install-Stats%20Mod-0b93bd?style=for-the-badge)](https://raw.githubusercontent.com/Virojet/Shell-Shockers-Stats-Mod/main/Shell-Shockers-Stats-Mod.user.js)
-![Version](https://img.shields.io/badge/version-2.0.1-0C576F?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.0.2-0C576F?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-13ba65?style=for-the-badge)
 
 </div>
@@ -38,6 +38,10 @@ Both are in the game's own Settings and are kept when you press **Confirm**.
 |---|---|
 | Keybindings ▸ **Match History** | The key that opens it, `\` to start with. Click the box and press a key. Backspace there means no key. |
 | Misc ▸ More options ▸ **Show match history button** | Shows the round button (on to start with). The key works either way. |
+
+## Fixed in 2.0.2
+
+- The Show match history button checkbox makes the same sound as the game's other checkboxes.
 
 ## Fixed in 2.0.1
 

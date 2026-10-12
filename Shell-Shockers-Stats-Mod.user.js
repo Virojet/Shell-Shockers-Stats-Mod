@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Shell Shockers Stats Mod
-// @version      2.0.1
+// @version      2.0.2
 // @description  Match History for Shell Shockers: every match's kills, deaths and KDR, a live scoreboard, and pictures to share. Open it from the round button on the home screen or with a key you set in Settings.
 // @namespace    https://github.com/Virojet/Shell-Shockers-Stats-Mod
 // @author       Virojet
@@ -93,7 +93,7 @@
   "use strict";
   if (window.ssStatsMod) return;   // already running: Tampermonkey and the Mod Menu both started it
 
-  const VERSION = "2.0.1";
+  const VERSION = "2.0.2";
   const TAG = "[Stats Mod]";
   const betterHud = () => !!(window.SSB_VERSION || window.__ssbSettings || window.__ssbOpenHistory);
   if (betterHud()) {
@@ -1827,6 +1827,8 @@
         box.addEventListener("change", () => {
           beginEdit();
           pending.show = box.checked;
+          // The sound the game's own checkboxes make.
+          sound("ui_onchange");
         });
         renderRows();
       }
