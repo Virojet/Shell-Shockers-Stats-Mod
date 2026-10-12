@@ -1,57 +1,62 @@
-# Shell Shockers — Stats Mod
+<div align="center">
 
-> A lightweight, standalone match‑stats tracker for [Shell Shockers](https://shellshock.io) — live K / D / KDR, a pinned respawn card, saved match history, and one‑click stats image export.
+<img src="icon.svg" width="96" alt="Stats Mod icon">
 
-[![INSTALL](https://img.shields.io/badge/INSTALL-one--click-brightgreen?style=for-the-badge)](https://raw.githubusercontent.com/Virojet/Shell-Shockers-Stats-Mod/main/Shell-Shockers-Stats-Mod.user.js)
-&nbsp;
-[![Version](https://img.shields.io/badge/version-1.0.3-black?style=for-the-badge)](./Shell-Shockers-Stats-Mod.user.js)
-[![License](https://img.shields.io/badge/license-MIT-lightgrey?style=for-the-badge)](./LICENSE)
+# Shell Shockers Stats Mod
 
-This is the stats tracker from **[Better HUD](https://github.com/Virojet/Shell-Shockers-Better-Hud-Mod)**, pulled out into its own small userscript for people who only want stats — no crosshair editor, no performance panel, nothing else.
+**Match History for Shell Shockers: your kills, deaths and KDR from every match, a live scoreboard, and pictures to share.**
 
----
+[![Install](https://img.shields.io/badge/Install-Stats%20Mod-0b93bd?style=for-the-badge)](https://raw.githubusercontent.com/Virojet/Shell-Shockers-Stats-Mod/main/Shell-Shockers-Stats-Mod.user.js)
+![Version](https://img.shields.io/badge/version-2.0.0-0C576F?style=for-the-badge)
+![License](https://img.shields.io/badge/license-MIT-13ba65?style=for-the-badge)
 
-## Install in 30 seconds
+</div>
 
-| Step | Action |
-|:---:|---|
-| **1** | Add a userscript manager — **[Tampermonkey](https://www.tampermonkey.net/)** (recommended) or [Violentmonkey](https://violentmonkey.github.io/) |
-| **2** | **[Click here to install](https://raw.githubusercontent.com/Virojet/Shell-Shockers-Stats-Mod/main/Shell-Shockers-Stats-Mod.user.js)** — the install dialog opens automatically |
-| **3** | Open **[shellshock.io](https://shellshock.io)** and play — the stats overlay appears at the end of each match |
+## Install
 
-Updates install automatically from then on.
+1. Install [Tampermonkey](https://www.tampermonkey.net/) (or [Violentmonkey](https://violentmonkey.github.io/)).
+2. **[Click to install the Stats Mod](https://raw.githubusercontent.com/Virojet/Shell-Shockers-Stats-Mod/main/Shell-Shockers-Stats-Mod.user.js)**, then press **Install**.
+3. Reload Shell Shockers.
 
-> [!NOTE]
-> Some userscript managers require **Developer Mode** (or an "Allow User Scripts" toggle) to be enabled before custom scripts will run. If the install doesn't take, enable it in your browser's Extensions page and try again.
+It updates by itself.
 
----
+> [!TIP]
+> Not showing in Chrome? Turn on **[Allow User Scripts](https://github.com/Virojet/Shell-Shockers-Better-Hud-Mod#allow-user-scripts)** for Tampermonkey.
 
 ## What it does
 
-- **Live session stats** — your Kills / Deaths / KDR tracked as you play, including melee and grenade kills.
-- **End‑of‑match overlay** — a full scoreboard pops up when a match ends.
-- **Pinned respawn card** — a compact K / D / KDR readout on the respawn screen (optional).
-- **Match History** — recent matches are saved locally so you can revisit the scoreboard, map, mode, server, and duration.
-- **Image export** — **Copy** or **Download** any scoreboard as an image, rendered in the game font.
-- **Accurate by design** — fresh matches start at 0, leave‑and‑rejoin keeps your totals, duplicate/blank names get their own rows, and a match‑end never wipes your live stats mid‑game.
+- **Match History**: the round button after Game Mode on the home screen opens your last 40 matches, with map, mode, server, length, and your kills / deaths / KDR. Filter by mode or map, rename or delete a match, or download the list as JSON or CSV.
+- **Every scoreboard**: open a match to see everyone's kills, deaths and KDR by team, and the score in King of the Coop.
+- **Live**: in a match, press the key to see the scoreboard as it stands.
+- **Pictures**: Copy Image and Download turn a scoreboard into a picture to share.
 
-Everything is stored locally in your browser (`localStorage`). Nothing is uploaded anywhere.
+## Settings
 
----
+Both are in the game's own Settings and are kept when you press **Confirm**.
 
-## Compatibility
+| Where | What |
+|---|---|
+| Keybindings ▸ **Match History** | The key that opens it, `\` to start with. Click the box and press a key. Backspace there means no key. |
+| Misc ▸ More options ▸ **Show match history button** | Shows the round button (on to start with). The key works either way. |
 
-Works on **shellshock.io** and its mirror domains (`algebra.best`, `deadlyegg.com`, `eggcombat.com`, and many more — see the `@match` list in the script).
+## New in 2.0
 
----
+- Rebuilt from Better HUD's Match History: the same window, the round button, filters, exports and pictures.
+- The key is set in the game's Settings and is `\` to start with. The old `/` and Tab keys are gone, so they no longer get in the way of the game.
+- The pop-up after each match and the pinned card are gone. Open Match History when you want it.
+- Your saved matches carry over.
+
+## Good to know
+
+- **Better HUD** has Match History built in, so the Stats Mod stays off while Better HUD runs. Both use the same saved history.
+- If you use the Mod Menu, it lists the Stats Mod with an on/off switch.
+- Matches are saved in your browser only.
 
 ## Credits
 
-Made by **Virojet** — Shell Shockers gameplay, montages, and mod content.
-[![YouTube](https://img.shields.io/badge/YouTube-%40subtovirojet-red?style=for-the-badge&logo=youtube&logoColor=white)](https://www.youtube.com/@subtovirojet)
+- Made by Virojet.
+- Pictures are drawn with [html-to-image](https://github.com/bubkoo/html-to-image) (MIT).
 
 ## License
 
-[MIT](./LICENSE) © ViroGear.
-
-A client‑side, cosmetic quality‑of‑life mod. It does **not** modify game logic or interact with the server beyond what the official client does. Use at your own discretion — moderators may still act against use of any third‑party scripts.
+[MIT](LICENSE)
