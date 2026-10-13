@@ -7,7 +7,7 @@
 **Match History for Shell Shockers: your kills, deaths and KDR from every match, a live scoreboard, and pictures to share.**
 
 [![Install](https://img.shields.io/badge/Install-Stats%20Mod-0b93bd?style=for-the-badge)](https://raw.githubusercontent.com/Virojet/Shell-Shockers-Stats-Mod/main/Shell-Shockers-Stats-Mod.user.js)
-![Version](https://img.shields.io/badge/version-2.0.2-0C576F?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.0.3-0C576F?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-13ba65?style=for-the-badge)
 
 </div>
@@ -38,6 +38,12 @@ Both are in the game's own Settings and are kept when you press **Confirm**.
 |---|---|
 | Keybindings ▸ **Match History** | The key that opens it, `\` to start with. Click the box and press a key. Backspace there means no key. |
 | Misc ▸ More options ▸ **Show match history button** | Shows the round button (on to start with). The key works either way. |
+
+## Fixed in 2.0.3
+
+- Trade kills count. When two players kill each other at the same moment, or a grenade lands after its thrower died, the kill shows in the kill feed but the game leaves it off its own scoreboard. The Stats Mod now counts every kill in the kill feed.
+- Kills and deaths in the last second are no longer lost when a player leaves, when you leave a match or close the tab, or when you press Reset Live Stats.
+- A player who leaves during your first minute in a match keeps their row if they got a kill or died while you were there.
 
 ## Fixed in 2.0.2
 

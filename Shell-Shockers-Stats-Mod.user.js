@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Shell Shockers Stats Mod
-// @version      2.0.2
+// @version      2.0.3
 // @description  Match History for Shell Shockers: every match's kills, deaths and KDR, a live scoreboard, and pictures to share. Open it from the round button on the home screen or with a key you set in Settings.
 // @namespace    https://github.com/Virojet/Shell-Shockers-Stats-Mod
 // @author       Virojet
@@ -80,10 +80,14 @@
    in Settings ▸ Keybindings ▸ Match History (Backspace there means no key), and Settings ▸ Misc ▸ More options can
    hide the button. As with the game's settings around them, a change is kept when you press Confirm.
 
-   How it counts: as the page loads, two small additions to the game's code give it the player list
-   (window.players) and your place in it (window.myPlayerIdx). Once a second each player's kills and deaths are
-   added up from the game's own counters, so switching teams or a counter reset doesn't lose them. The match code
-   and server come from the address of the match's connection.
+   How it counts: as the page loads, small additions to the game's code give it the player list (window.players),
+   your place in it (window.myPlayerIdx) and the kills the game leaves off its scoreboard. Once a second each
+   player's kills and deaths are added up from those counters, so switching teams or a counter reset doesn't lose
+   them. The game counts a kill only while the killer is alive, so a trade (two players killing each other at once)
+   or a grenade that lands after its thrower died shows in the kill feed but not on the scoreboard; the Stats Mod
+   counts those too. A player who leaves keeps what they did in their last second, and so does a match you leave;
+   one who leaves in your first minute keeps their row if they killed or died while you were there. The match
+   code and server come from the address of the match's connection.
 
    The history is kept in this site's storage under the same name Better HUD uses, so the two share it. Better HUD
    has Match History built in, so with Better HUD running the Stats Mod stays off.
@@ -93,7 +97,7 @@
   "use strict";
   if (window.ssStatsMod) return;   // already running: Tampermonkey and the Mod Menu both started it
 
-  const VERSION = "2.0.2";
+  const VERSION = "2.0.3";
   const TAG = "[Stats Mod]";
   const betterHud = () => !!(window.SSB_VERSION || window.__ssbSettings || window.__ssbOpenHistory);
   if (betterHud()) {
@@ -155,10 +159,11 @@
   let dead = false;      // Better HUD turned up: off for good on this page
 
   /* ---- Game patches ----
-     The game's code is one big inline script (it starts with "(()=>{"). As the page adds it, two additions are made
-     to it: window.players (the game's player list) and window.myPlayerIdx (your slot in that list). The list is
-     made anew for each match, and each time it's made it's put on window again. If another mod made the same
-     additions they're left alone. Anything that reads that script's text still gets the original back. */
+     The game's code is one big inline script (it starts with "(()=>{"). As the page adds it, three additions are
+     made to it: window.players (the game's player list), window.myPlayerIdx (your slot in that list) and a count of
+     the kills the game leaves off its scoreboard (trade-kills). The list is made anew for each match, and each time
+     it's made it's put on window again. If another mod made the same additions they're left alone. Anything that
+     reads that script's text still gets the original back. */
   const replaceAll = String.prototype.replaceAll;
   const PATCHES = [
     ["players", src => {
@@ -174,6 +179,26 @@
       if (src.includes("window.myPlayerIdx=")) return true;
       const m = /gameJoined_ received"\),(\w+)=\w+\.unPackInt8U\(\)/.exec(src) || /([A-Z]{2})=[A-Za-z$_]+\.unPackInt8U\(\)/.exec(src);
       return m ? replaceAll.call(src, m[0], () => m[0] + ",window.myPlayerIdx=" + m[1]) : null;
+    }],
+    // The game adds a kill to the killer's count only while the killer is alive (K.isDead()||(K.scoreKill(),…)).
+    // In a trade the killer's own death usually comes first, so the kill shows in the kill feed but isn't counted;
+    // a grenade that lands after its thrower died is the same. Each of those adds 1 to the killer's
+    // __ssbSkippedKills. A player who killed themselves (a fall, their own grenade) is left out, as the game does,
+    // and the game's own check is left as it is.
+    ["trade-kills", src => {
+      if (src.includes("__ssbSkippedKills")) return true;
+      const at = src.indexOf(".isDead()||(");
+      if (at < 0 || src.indexOf(".isDead()||(", at + 1) >= 0) return null;
+      let j = at;
+      while (j > 0 && /[\w$]/.test(src[j - 1])) j--;
+      const k = src.slice(j, at);
+      if (!k || src[j - 1] === "." || !src.startsWith(k + ".scoreKill()", at + 12)) return null;
+      // The victim: the other player in the kill feed call that follows (K&&V&&feed(K,V)), who died just before.
+      const rx = n => n.replace(/\$/g, "\\$");
+      const v = new RegExp("[^\\w$]" + rx(k) + "&&([\\w$]+)&&[\\w$]+\\(" + rx(k) + ",\\1\\)").exec(src.slice(at, at + 4000));
+      if (!v || !new RegExp("[^\\w$]" + rx(v[1]) + "\\.die\\(\\)").test(src.slice(Math.max(0, j - 2000), j))) return null;
+      return src.slice(0, j) + "(" + k + ".isDead()&&" + v[1] + "&&" + k + "!==" + v[1] + "&&(" + k +
+        ".__ssbSkippedKills=(" + k + ".__ssbSkippedKills|0)+1)," + src.slice(j, at + 9) + ")" + src.slice(at + 9);
     }],
   ];
   let patchReport = null;
@@ -416,6 +441,7 @@
       st.everSeenTeams = !!s.everSeenTeams;
       st.mode = s.mode || "";
       st._snapMap = {};
+      st._seen = [];
       st._restoreDone = true;
       return true;
     } catch (e) {
@@ -424,6 +450,73 @@
   }
 
   const nameOf = (p, slot) => p.name || p.safeName || p.lw || "Player " + slot;
+
+  // The tracker's mark on each of the game's player objects: how many of its skipped kills (trade-kills) are in a
+  // record already. A player object without it hasn't been counted yet (a new player, or everyone after a reload).
+  const SKIPS = "__ssbStatsSkipsCounted";
+
+  // Adds what changed in a player's counters since the last look to their record. A player who has left keeps
+  // their counters, so this works for them too.
+  function count(rec, c) {
+    if (!c || !c.stats) return;
+    const u = 0 | c.stats.kills, f = 0 | c.stats.deaths, tk = 0 | c.totalKills, sk = 0 | c.__ssbSkippedKills;
+    // A player object this record hasn't counted before (after a reload, or a player who left and came back)
+    // starts from what the server sends: their kills since their last death or team switch. Those can include
+    // skipped kills (below) the record already has, from that stretch (rec._skL).
+    const fresh = c[SKIPS] === undefined;
+    let gd = u - rec._lastK;
+    if (fresh && gd > 0) gd = Math.max(0, gd - (rec._skL | 0));
+    // Kills: the bigger of the scoreboard's and the lifetime counter's rise, so a counter reset (a team
+    // switch) loses nothing.
+    let ud = rec._lastTK == null ? 0 : tk - rec._lastTK;
+    if (ud < 0 || ud > 30) ud = 0;
+    const add = Math.max(gd > 0 ? gd : 0, ud);
+    if (add > 0) rec.kills += add;
+    else if (u < rec._lastK && rec._q) rec.kills = u;
+    if (!fresh && (u < rec._lastK || (c.team || 0) !== (rec.team || 0))) rec._skL = 0;   // a team switch
+    const died = f > rec._lastD;
+    if (died) {
+      rec.deaths += f - rec._lastD;
+      rec._skL = 0;
+    } else if (f < rec._lastD && rec._q) rec.deaths = f;
+    // Then the kills the game left off its scoreboard, each once.
+    const sd = sk - (0 | c[SKIPS]);
+    if (sd > 0) {
+      rec.kills += sd;
+      rec._skL = (rec._skL | 0) + sd;
+    }
+    c[SKIPS] = sk;
+    // Someone who kills or dies while we look is in this match, not left over from the last one: they keep their
+    // row when they leave, even in your first minute.
+    if (rec._q && !fresh && (add > 0 || sd > 0 || died)) rec._q = 0;
+    rec._lastK = u;
+    rec._lastD = f;
+    rec._lastTK = tk;
+  }
+
+  // One more look at the players seen last time (the list keeps them after you leave a match), then the snapshot.
+  // Before the last saves: leaving a match, the tab closing or going to the background, the Stats Mod turned off.
+  function flush() {
+    try {
+      if (!st._seen || !st._seen.length) return;
+      for (const [rec, c] of st._seen) count(rec, c);
+      snap();
+    } catch (e) { warn("Counting", e); }
+  }
+
+  function snap() {
+    if (!st._snapMap) st._snapMap = {};
+    let si = 0;
+    st.snapshot = Object.keys(st.byName).map(k => {
+      const o = st.byName[k], s = st._snapMap[k] || (st._snapMap[k] = { id: si++ });
+      s.name = o.name;
+      s.team = o.team;
+      s.isMe = o.isMe;
+      s.kills = o.kills;
+      s.deaths = o.deaths;
+      return s;
+    });
+  }
 
   // Once a second: reads the scoreboard and adds what changed to each player's totals.
   function track() {
@@ -449,12 +542,14 @@
     } else st._emptyN = (st._emptyN || 0) + 1;
     if (st._prevHadPlayers && !has) {
       st._readyForReset = true;
-      // Left the game: the match ends now, and its history entry is brought up to date at once.
+      // Left the game: the match ends now, and its history entry is brought up to date at once (after a last look
+      // at the players, who are still in the list).
       if (!playing && st.matchStartMs) {
         st.matchEndMs = Date.now();
         st.inMatch = false;
         st.hadLock = false;
         st._prevHadPlayers = false;
+        flush();
         save(true);
         return;
       }
@@ -475,6 +570,7 @@
             st.matchStartMs = Date.now();
             st.byName = {};
             st._snapMap = {};
+            st._seen = [];
             st.everSeenTeams = false;
             st.mode = "";
             st._modeTs = 0;
@@ -513,6 +609,10 @@
     if (!st.byName) st.byName = {};
     if (st._seedQ && (locked || Date.now() - st._seedQ > 6e4)) st._seedQ = 0;
 
+    // Players seen last time who have left since: the game drops them from its list, but their counters stay as
+    // they were, so their last second still counts.
+    for (const [rec, c] of st._seen || []) if (!players.includes(c)) count(rec, c);
+
     // Each slot's record: by name, or by name plus slot when two players share a name.
     const present = new Set(), rows = [];
     for (let l = 0; l < players.length; l++) {
@@ -532,7 +632,7 @@
       present.add(key);
       rows.push([key, st.byName[key], l, u, f, team, m, c, fk, tk]);
     }
-    const used = new Set();
+    const used = new Set(), seen = [];
     for (const row of rows) {
       let [key, rec, l, u, f, team, m, c, fk, tk] = row;
       if (rec && used.has(rec)) rec = undefined;
@@ -558,22 +658,11 @@
         rec = st.byName[key] = { name: m, team, isMe: false, kills: u, deaths: f, _lastK: u, _lastD: f, _lastTK: tk, _slot: l, _q: st._seedQ ? 1 : 0 };
       }
       used.add(rec);
-      // Kills: the bigger of the scoreboard's and the lifetime counter's rise, so a counter reset (a team
-      // switch) loses nothing.
-      const gd = u - rec._lastK;
-      let ud = rec._lastTK == null ? 0 : tk - rec._lastTK;
-      if (ud < 0 || ud > 30) ud = 0;
-      const add = Math.max(gd > 0 ? gd : 0, ud > 0 ? ud : 0);
-      if (add > 0) rec.kills += add;
-      else if (u < rec._lastK && rec._q) rec.kills = u;
-      if (f > rec._lastD) rec.deaths += f - rec._lastD;
-      else if (f < rec._lastD && rec._q) rec.deaths = f;
+      seen.push([rec, c]);
+      count(rec, c);
       if (rec._ret) rec._ret = 0;
       if (rec._q && !st._seedQ) rec._q = 0;
       rec._slot = l;
-      rec._lastK = u;
-      rec._lastD = f;
-      rec._lastTK = tk;
       rec.team = team;
       const g = vue().game;
       rec.isMe = (typeof window.myPlayerIdx === "number" && l === window.myPlayerIdx) ||
@@ -584,6 +673,7 @@
         st._meRec = rec;
       }
     }
+    st._seen = seen;
     // Players who left with nothing to their name (or seen only while joining) are dropped after 4 s.
     const now = Date.now();
     for (const k of Object.keys(st.byName)) {
@@ -598,17 +688,7 @@
         if (st._snapMap) delete st._snapMap[k];
       }
     }
-    if (!st._snapMap) st._snapMap = {};
-    let si = 0;
-    st.snapshot = Object.keys(st.byName).map(k => {
-      const o = st.byName[k], s = st._snapMap[k] || (st._snapMap[k] = { id: si++ });
-      s.name = o.name;
-      s.team = o.team;
-      s.isMe = o.isMe;
-      s.kills = o.kills;
-      s.deaths = o.deaths;
-      return s;
-    });
+    snap();
   }
 
   /* ---- Dialogs and toasts (Better HUD's look) ----
@@ -1132,16 +1212,25 @@
 
   async function resetLive() {
     if (!(await confirmBox({ title: "Reset Stats", text: "Reset the tracked kills / deaths / KDR for this match?", ok: "Reset", danger: true }))) return;
+    // The match so far keeps its history entry, brought up to date first. The kills the game skipped in each
+    // player's life so far (_skL) carry over: after a reload the server's count may have them.
+    flush();
+    save(true);
+    const was = new Map((st._seen || []).map(([rec, c]) => [c, rec]));
     const pl = window.players || [];
     st.byName = {};
     st._snapMap = {};
     st.snapshot = [];
+    const seen = [];
     for (let i = 0; i < pl.length; i++) {
       const c = pl[i];
       if (!c || !c.stats) continue;
-      const m = nameOf(c, i), key = st.byName[m] ? m + String.fromCharCode(0) + i : m;
-      st.byName[key] = { name: m, team: c.team || 0, isMe: false, kills: 0, deaths: 0, _lastK: 0 | c.stats.kills, _lastD: 0 | c.stats.deaths, _lastTK: 0 | c.totalKills, _slot: i };
+      const m = nameOf(c, i), key = st.byName[m] ? m + String.fromCharCode(0) + i : m, old = was.get(c);
+      st.byName[key] = { name: m, team: c.team || 0, isMe: false, kills: 0, deaths: 0, _lastK: 0 | c.stats.kills, _lastD: 0 | c.stats.deaths, _lastTK: 0 | c.totalKills, _slot: i, _skL: old ? old._skL | 0 : 0 };
+      c[SKIPS] = 0 | c.__ssbSkippedKills;
+      seen.push([st.byName[key], c]);
     }
+    st._seen = seen;
     st._meRec = null;
     st.matchStartMs = Date.now();
     st.matchEndMs = 0;
@@ -2002,8 +2091,11 @@
 
   /* ---- On and off ---- */
   let trackTimer = 0, saveTimer = 0, menuTimer = 0, resizeTimer = 0;
-  const onUnload = () => save(true);
-  const onVisibility = () => { if (document.visibilityState === "hidden") save(true); };
+  const onUnload = () => {
+    flush();
+    save(true);
+  };
+  const onVisibility = () => { if (document.visibilityState === "hidden") onUnload(); };
   function onLockChange() {
     if (document.pointerLockElement) {
       unwatchBtn();
@@ -2070,6 +2162,7 @@
   }
   function stop() {
     if (!running) return;
+    flush();
     save(true);
     running = false;
     clearInterval(trackTimer);
